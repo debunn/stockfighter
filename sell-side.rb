@@ -30,6 +30,7 @@ class Stock_Position
     @stock_sold = 0 # The number of shares sold to date
     @purchased_total = 0 # The total amount of money spent to purchase stocks
     @sold_total = 0 # The total amount of money made selling stocks
+    @price_metric = 0 # Metric for the average price of held or shorted stocks
   end
 
   def current_position
@@ -59,14 +60,42 @@ class Stock_Position
   end
 
   def trade(shares, price)
-    if shares > 0 then
+    if shares > 0 then # buy action
+      # Recalculate the price metric for current position
+      if @stock_position < 0
+        if @stock_position + shares == 0
+          @price_metric = 0
+        elsif @stock_position + shares > 0
+          @price_metric = price
+        end
+      else
+        @price_metric = ((@price_metric * @stock_position) + (shares * price)) /
+                        (@stock_position + shares)
+      end
+
       @stock_purchased += shares
       @purchased_total += (price * shares)
-    elsif shares < 0 then
+    elsif shares < 0 then # sell action
+      # Recalculate the price metric for current position
+      if @stock_position > 0
+        if @stock_position + shares == 0
+          @price_metric = 0
+        elsif @stock_position + shares < 0
+          @price_metric = price
+        end
+      else
+        @price_metric = ((@price_metric * @stock_position) + (shares * price)) /
+            (@stock_position + shares)
+      end
+
       @stock_sold += shares.abs
       @sold_total += (price * shares.abs)
     end
     @stock_position += shares
+  end
+
+  def current_price_metric
+    @price_metric
   end
 
   def avg_purchase()
@@ -92,40 +121,51 @@ while true do
   take_action = {action: 'sleep'}
 
   if !($last_quote.has_key?('ask')) || !($last_quote.has_key?('bid')) # no quote data, sleep
+    if $my_pos.current_position < 0 then
+      take_action = {action: 'buy', amount: 10, price: ($last_quote['last']) - $profit}
+    else
+      take_action = {action: 'sell', amount: 10, price: ($last_quote['last']) + $profit}
+    end
 
-  elsif $my_pos.avg_purchase == 0 # default open position - buy some stock
+  elsif $my_pos.current_price_metric == 0 # no stock position - buy some stock
     take_action = {action: 'buy', amount: 100, price: ($last_quote['bid']) + 5}
 
   elsif $my_pos.current_position < -800 # too far on margin - buy some stock
-    if $last_quote['ask'] < ($my_pos.avg_purchase) - $profit # only buy if price is favourable
+    if $last_quote['ask'] < ($my_pos.current_price_metric) - $profit # only buy if price is favourable
       take_action = {action: 'buy', amount: 100, price: ($last_quote['ask']) + 5}
     end
 
   elsif $my_pos.current_position > 800 # too long - sell some stock
-    if $last_quote['bid'] > ($my_pos.avg_purchase) + $profit
+    if $last_quote['bid'] > ($my_pos.current_price_metric) + $profit
       take_action = {action: 'sell', amount: 100, price: ($last_quote['bid']) - 5}
     end
 
-  elsif $last_quote['ask'] < ($my_pos.avg_purchase) - $profit
-    take_action = {action: 'buy', amount: 100, price: ($last_quote['ask']) + 5}
-
-  elsif $last_quote['bid'] > ($my_pos.avg_purchase) + $profit
+  elsif $last_quote['bid'] > ($my_pos.current_price_metric) + $profit
     take_action = {action: 'sell', amount: 100, price: ($last_quote['bid']) - 5}
+
+  elsif $last_quote['ask'] < ($my_pos.current_price_metric) - $profit
+    take_action = {action: 'buy', amount: 100, price: ($last_quote['ask']) + 5}
 
   else # sleep off this round
 
   end
 
   case take_action[:action]
-    when 'sleep'
-      sleep(1)
     when 'buy'
       $my_pos.execute_trade(take_action[:amount], take_action[:price], api)
     when 'sell'
       $my_pos.execute_trade((take_action[:amount]) * -1, take_action[:price], api)
   end
 
-  p 'Cash: ' + $my_pos.profit.to_s + ', Pos: ' + $my_pos.current_position.to_s +
-        ', Avg buy: ' + $my_pos.avg_purchase.to_s + ', Avg sell: ' + $my_pos.avg_sell.to_s
+  p 'NAV: ' + ($my_pos.profit + $last_quote['last'] * $my_pos.current_position).to_s +
+        ', Pos: ' + $my_pos.current_position.to_s + ', Avg buy: ' + $my_pos.avg_purchase.to_s +
+        ', Avg sell: ' + $my_pos.avg_sell.to_s +
+        ', Price metric: ' + $my_pos.current_price_metric.to_s
+
+  #if take_action[:action] == 'sleep'
+    sleep(1)
+  #else
+  #  sleep(5)
+  #end
 
 end
