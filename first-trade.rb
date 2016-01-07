@@ -1,8 +1,8 @@
 require 'rubygems'
 require 'httparty'
 require 'json'
+load 'apikey.rb'
 
-$apikey = "1f79b068932efc828b4545cc8ad89af494a2b57e"
 $venue = "KKEWEX"   # Replace this with your real value.
 $stock = "LIG"  #Fun fact: Japanese programmers often use "hogehoge" where Americans use "foobar."  You should probably replace this with your real value.
 $base_url = "https://api.stockfighter.io/ob/api"

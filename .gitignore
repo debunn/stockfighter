@@ -25,3 +25,6 @@
 # Ignore .idea folder
 /.idea/
 .idea/
+
+# Ignore apikey.rb
+apikey.rb

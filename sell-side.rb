@@ -1,8 +1,7 @@
 require 'stockfighter'
+load 'apikey.rb'
 
-apikey = "1f79b068932efc828b4545cc8ad89af494a2b57e"
-
-gm = Stockfighter::GM.new(key: apikey, level: "sell_side")
+gm = Stockfighter::GM.new(key: $apikey, level: "sell_side")
 
 api = Stockfighter::Api.new(gm.config)
 
