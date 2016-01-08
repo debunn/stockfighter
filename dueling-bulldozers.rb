@@ -128,30 +128,30 @@ while true do
   take_action = {action: 'sleep'}
 
   if !($last_quote.has_key?('ask')) || !($last_quote.has_key?('bid')) # no quote data, sleep
-    if $my_pos.current_position < 0 then
-      take_action = {action: 'buy', amount: 10, price: ($last_quote['last']) - $profit}
+    if $my_pos.current_position < 0
+      take_action = {action: 'buy', amount: 20, price: ($last_quote['last']) - $profit}
     else
-      take_action = {action: 'sell', amount: 10, price: ($last_quote['last']) + $profit}
+      take_action = {action: 'sell', amount: 20, price: ($last_quote['last']) + $profit}
     end
 
   elsif $my_pos.current_price_metric == 0 # no stock position - buy some stock
-    take_action = {action: 'buy', amount: 100, price: ($last_quote['bid']) + 5}
+    take_action = {action: 'buy', amount: 20, price: ($last_quote['ask']) + 5}
 
-  elsif $my_pos.current_position < -200 # too far on margin - buy some stock
+  elsif $my_pos.current_position < -400 # too far on margin - buy some stock
     if $last_quote['ask'] < ($my_pos.current_price_metric) - $profit # only buy if price is favourable
       take_action = {action: 'buy', amount: 100, price: ($last_quote['ask']) + 5}
     end
 
-  elsif $my_pos.current_position > 200 # too long - sell some stock
+  elsif $my_pos.current_position > 400 # too long - sell some stock
     if $last_quote['bid'] > ($my_pos.current_price_metric) + $profit
       take_action = {action: 'sell', amount: 100, price: ($last_quote['bid']) - 5}
     end
 
   elsif $last_quote['bid'] > ($my_pos.current_price_metric) + $profit
-    take_action = {action: 'sell', amount: 100, price: ($last_quote['bid']) - 5}
+    take_action = {action: 'sell', amount: $my_pos.current_position > 0 ? 100 : 50, price: ($last_quote['bid']) - 5}
 
   elsif $last_quote['ask'] < ($my_pos.current_price_metric) - $profit
-    take_action = {action: 'buy', amount: 100, price: ($last_quote['ask']) + 5}
+    take_action = {action: 'buy', amount: $my_pos.current_position < 0 ? 100 : 50, price: ($last_quote['ask']) + 5}
 
   else # sleep off this round
 
@@ -171,7 +171,7 @@ while true do
         ', Price metric: ' + $my_pos.current_price_metric.to_s
 
   #if take_action[:action] == 'sleep'
-    sleep(1)
+  #  sleep(1)
   #else
   #  sleep(5)
   #end
