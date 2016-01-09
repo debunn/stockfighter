@@ -123,48 +123,45 @@ $my_pos = Stock_Position.new
 $profit = 100 # The profit goal for a transaction
 $temp_counter = 0
 
-websockets = Stockfighter::Websockets.new(gm.config)
-websockets.add_quote_callback { |quote|
+ticker_websocket = Stockfighter::Websockets.new(gm.config)
+ticker_websocket.add_quote_callback { |quote|
   # Ensure you don't have long running operations (eg calling api.*) as part of this
   # callback method as the event processing for all websockets is performed on 1 thread.
   $last_quote = quote
+  $last_bid = quote.has_key?('bid') ? quote['bid'] : $last_bid
+  $last_ask = quote.has_key?('ask') ? quote['ask'] : $last_ask
 }
 
-websockets.add_execution_callback { |execution|
+execution_websocket = Stockfighter::Websockets.new(gm.config)
+execution_websocket.add_execution_callback { |execution|
   # Ensure you don't have long running operations (eg calling api.*) as part of this
   # callback method as the event processing for all websockets is performed on 1 thread.
   $last_execute = execution
 
+  if !(execution['order']['open'])
+    p 'Order: ' + (execution['order']['id']).to_s + ' is closed.'
+
+    execution['order']['fills'].each do |fill_item|
+      if execution['order']['direction'] == 'sell'
+        fill_item['qty'] = fill_item['qty'] * -1
+      end
+      $my_pos.trade(fill_item["qty"], fill_item["price"])
+    end
+
+  end
+
 }
 
 # Isolate the websockets to their own thread - mixing with trades causes... bad things.
-thr = Thread.new { websockets.start() }
+ticker_thr = Thread.new { ticker_websocket.start(tickertape_enabled:true, executions_enabled:false) }
+execution_thr = Thread.new { execution_websocket.start(tickertape_enabled:false, executions_enabled:true) }
 
 while true do
   $order_id = 0
   $last_quote = $last_quote.nil? ? api.get_quote : $last_quote
   take_action = {action: 'sleep'}
 
-  # Try to find the status of any open orders
-  if !($my_pos.open_orders.nil?)
-    $my_pos.open_orders.each_key do |key|
-      order = api.order_status(key)
-      if !(order['open'])
-        order['fills'].each do |fill_item|
-          if order['direction'] == 'sell'
-            fill_item['qty'] = fill_item['qty'] * -1
-          end
-          $my_pos.trade(fill_item["qty"], fill_item["price"])
-        end
-
-        $my_pos.close_order(key)
-      end
-    end
-  end
-
-  if $my_pos.open_orders.length > 2 # sleep if three orders are still open
-
-  elsif !($last_quote.has_key?('ask')) || !($last_quote.has_key?('bid')) # no quote data, sleep
+  if $last_ask.nil? || $last_bid.nil? # no quote data, sleep
     if $my_pos.current_position < 0
       take_action = {action: 'buy', amount: 20, price: ($last_quote['last']) - $profit}
     else
@@ -172,23 +169,23 @@ while true do
     end
 
   elsif $my_pos.current_price_metric == 0 # no stock position - buy some stock
-    take_action = {action: 'buy', amount: 20, price: ($last_quote['ask']) + 5}
+    take_action = {action: 'buy', amount: 20, price: ($last_ask) + 5}
 
   elsif $my_pos.current_position < -400 # too far on margin - buy some stock
-    if $last_quote['ask'] < ($my_pos.current_price_metric) - $profit # only buy if price is favourable
-      take_action = {action: 'buy', amount: 100, price: ($last_quote['ask']) + 5}
+    if $last_ask < ($my_pos.current_price_metric) - $profit # only buy if price is favourable
+      take_action = {action: 'buy', amount: 100, price: ($last_ask) + 5}
     end
 
   elsif $my_pos.current_position > 400 # too long - sell some stock
-    if $last_quote['bid'] > ($my_pos.current_price_metric) + $profit
-      take_action = {action: 'sell', amount: 100, price: ($last_quote['bid']) - 5}
+    if $last_bid > ($my_pos.current_price_metric) + $profit
+      take_action = {action: 'sell', amount: 100, price: ($last_bid) - 5}
     end
 
-  elsif $last_quote['bid'] > ($my_pos.current_price_metric) + $profit
-    take_action = {action: 'sell', amount: $my_pos.current_position > 0 ? 100 : 50, price: ($last_quote['bid']) - 5}
+  elsif $last_bid > ($my_pos.current_price_metric) + $profit
+    take_action = {action: 'sell', amount: $my_pos.current_position > 0 ? 100 : 50, price: ($last_bid) - 5}
 
-  elsif $last_quote['ask'] < ($my_pos.current_price_metric) - $profit
-    take_action = {action: 'buy', amount: $my_pos.current_position < 0 ? 100 : 50, price: ($last_quote['ask']) + 5}
+  elsif $last_ask < ($my_pos.current_price_metric) - $profit
+    take_action = {action: 'buy', amount: $my_pos.current_position < 0 ? 100 : 50, price: ($last_ask) + 5}
 
   else # sleep off this round
 
@@ -201,13 +198,14 @@ while true do
       $my_pos.execute_trade((take_action[:amount]) * -1, take_action[:price], api)
   end
 
-  if true
-  p 'NAV: $' +
+
+  tick_output = 'NAV: $' +
     (($my_pos.profit + $last_quote['last'] * $my_pos.current_position)/100).to_s.currency_format +
         ', Pos: ' + $my_pos.current_position.to_s + ', Avg buy: ' + $my_pos.avg_purchase.to_s +
         ', Avg sell: ' + $my_pos.avg_sell.to_s +
-        ', Price metric: ' + $my_pos.current_price_metric.to_s + ', open: ' + $my_pos.open_orders.length.to_s
-  end
+        ', Price metric: ' + $my_pos.current_price_metric.to_s
+
+  $last_output == tick_output ? true : (p tick_output ; $last_output = tick_output)
 
   #if take_action[:action] == 'sleep'
   #  sleep(1)
