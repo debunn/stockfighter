@@ -38,6 +38,7 @@ class Stock_Position
     @purchased_total = 0 # The total amount of money spent to purchase stocks
     @sold_total = 0 # The total amount of money made selling stocks
     @price_metric = 0 # Metric for the average price of held or shorted stocks
+    @open_orders = {}
   end
 
   def current_position
@@ -53,17 +54,8 @@ class Stock_Position
     end
     order = api.place_order(price: price, quantity: shares,
                             direction: trade_action, order_type: 'immediate-or-cancel')
-    while order["open"] do
-      sleep(1)
-      order = api.order_status(order['id'])
-    end
+    @open_orders[order['id']] = true
 
-    order["fills"].each do |fill_item|
-      if order['direction'] == 'sell'
-        fill_item['qty'] = fill_item['qty'] * -1
-      end
-      self.trade(fill_item["qty"], fill_item["price"])
-    end
   end
 
   def trade(shares, price)
@@ -105,6 +97,14 @@ class Stock_Position
     @price_metric
   end
 
+  def open_orders
+    @open_orders
+  end
+
+  def close_order(order_id)
+    @open_orders.delete order_id
+  end
+
   def avg_purchase()
     @stock_purchased == 0 ? 0 : @purchased_total / @stock_purchased
   end
@@ -121,13 +121,50 @@ end
 
 $my_pos = Stock_Position.new
 $profit = 100 # The profit goal for a transaction
+$temp_counter = 0
+
+websockets = Stockfighter::Websockets.new(gm.config)
+websockets.add_quote_callback { |quote|
+  # Ensure you don't have long running operations (eg calling api.*) as part of this
+  # callback method as the event processing for all websockets is performed on 1 thread.
+  $last_quote = quote
+}
+
+websockets.add_execution_callback { |execution|
+  # Ensure you don't have long running operations (eg calling api.*) as part of this
+  # callback method as the event processing for all websockets is performed on 1 thread.
+  $last_execute = execution
+
+}
+
+# Isolate the websockets to their own thread - mixing with trades causes... bad things.
+thr = Thread.new { websockets.start() }
 
 while true do
   $order_id = 0
-  $last_quote = api.get_quote
+  $last_quote = $last_quote.nil? ? api.get_quote : $last_quote
   take_action = {action: 'sleep'}
 
-  if !($last_quote.has_key?('ask')) || !($last_quote.has_key?('bid')) # no quote data, sleep
+  # Try to find the status of any open orders
+  if !($my_pos.open_orders.nil?)
+    $my_pos.open_orders.each_key do |key|
+      order = api.order_status(key)
+      if !(order['open'])
+        order['fills'].each do |fill_item|
+          if order['direction'] == 'sell'
+            fill_item['qty'] = fill_item['qty'] * -1
+          end
+          $my_pos.trade(fill_item["qty"], fill_item["price"])
+        end
+
+        $my_pos.close_order(key)
+      end
+    end
+  end
+
+  if $my_pos.open_orders.length > 2 # sleep if three orders are still open
+
+  elsif !($last_quote.has_key?('ask')) || !($last_quote.has_key?('bid')) # no quote data, sleep
     if $my_pos.current_position < 0
       take_action = {action: 'buy', amount: 20, price: ($last_quote['last']) - $profit}
     else
@@ -164,11 +201,13 @@ while true do
       $my_pos.execute_trade((take_action[:amount]) * -1, take_action[:price], api)
   end
 
-  p 'NAV: ' +
+  if true
+  p 'NAV: $' +
     (($my_pos.profit + $last_quote['last'] * $my_pos.current_position)/100).to_s.currency_format +
         ', Pos: ' + $my_pos.current_position.to_s + ', Avg buy: ' + $my_pos.avg_purchase.to_s +
         ', Avg sell: ' + $my_pos.avg_sell.to_s +
-        ', Price metric: ' + $my_pos.current_price_metric.to_s
+        ', Price metric: ' + $my_pos.current_price_metric.to_s + ', open: ' + $my_pos.open_orders.length.to_s
+  end
 
   #if take_action[:action] == 'sleep'
   #  sleep(1)
