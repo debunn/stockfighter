@@ -138,7 +138,7 @@ execution_websocket.add_execution_callback { |execution|
   # callback method as the event processing for all websockets is performed on 1 thread.
   $last_execute = execution
 
-  if !(execution['order']['open'])
+  if !(execution['order']['incomingComplete'])
     p 'Order: ' + (execution['order']['id']).to_s + ' is closed.'
 
     execution['order']['fills'].each do |fill_item|
