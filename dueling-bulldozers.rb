@@ -296,18 +296,23 @@ while true do
 
   elsif sell_profit > buy_profit && sell_profit > 0
     if $my_analysis.last_bid > ($my_pos.current_price_metric) + ($profit + $price_buffer)
-      volume = $my_pos.current_position < 0 ? 50 : (sell_profit > 300 ? 300 : sell_profit)
+      volume = $my_pos.current_position < 0 ? 50 : (sell_profit > 400 ? 400 : sell_profit)
       take_action = {action: 'sell', amount: volume, price: ($my_analysis.last_bid - $price_buffer)}
     end
 
   elsif buy_profit >= sell_profit && buy_profit > 0
     if $my_analysis.last_ask < ($my_pos.current_price_metric) - ($profit + $price_buffer)
-      volume = $my_pos.current_position > 0 ? 50 : (buy_profit > 300 ? 300 : buy_profit)
+      volume = $my_pos.current_position > 0 ? 50 : (buy_profit > 400 ? 400 : buy_profit)
       take_action = {action: 'buy', amount: volume , price: ($my_analysis.last_ask + $price_buffer)}
     end
 
   else # sleep
-    
+    if $my_analysis.highest_last - $my_analysis.lowest_last > 5
+      $my_pos.current_position < 0 ?
+          (take_action = {action: 'buy', amount: 300, price: $my_analysis.lowest_last}) : true
+      $my_pos.current_position > 0 ?
+          (take_action = {action: 'sell', amount: 300, price: $my_analysis.highest_last}) : true
+    end
   end
 
 
