@@ -35,6 +35,3 @@ DEPENDENCIES
   httparty (= 0.13.7)
   json (~> 1.8)
   stockfighter
-
-BUNDLED WITH
-   1.10.6
