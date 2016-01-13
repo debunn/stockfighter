@@ -137,8 +137,7 @@ class StockPosition
 
   def record_action(order_id, ts, qty, price)
     # Record that this transaction has occured for this order
-
-    @order_log[order_id] = {ts => {qty: qty, price: price}}
+    @order_log[order_id][ts] = {qty: qty, price: price}
   end
 
   def order_log(order_id)
@@ -377,12 +376,12 @@ while true do
     $my_pos.execute_trade(-2000, 100, api, 'limit')
     p 'Selling 2000@100'
     sleep(5)
-    $my_pos.execute_trade(2000, 20000, api, 'limit')
-    p 'Buying 2000@20000'
+    $my_pos.execute_trade(200, 20000, api, 'limit')
+    p 'Buying 200@20000'
 
   else # Exploit any open (*STUPID*) market orders
-    $my_pos.execute_trade(-10, 100000000, api, 'limit')
-    p 'Selling 5@100000000'
+    $my_pos.execute_trade(-1, 10000000000, api, 'limit')
+    p 'Selling 1@10000000000'
 
   end
 
