@@ -15,10 +15,10 @@ ansi_code['danger']  = "\e[#31m"
 
 # Output win message, stop level when level informs of win conditions
 gm.add_state_change_callback { |previous_state, new_state|
-    if new_state == 'won'
-        puts "You've won!"
-        gm.stop
-    end
+  if new_state == 'won'
+    puts "You've won!"
+    gm.stop
+  end
 }
 
 api = Stockfighter::Api.new(gm.config)
@@ -47,7 +47,7 @@ class StockPosition
     @order_log = {} # Tracks each transaction, prevents duplicate processing
   end
 
-  def current_position 
+  def current_position
     # Number of shares held: >0 for long, <0 for short
     @stock_position
   end
@@ -71,7 +71,7 @@ class StockPosition
   def trade(shares, price)
     # Resolves current position based on trade transaction information
     # This currently is called only by the execution websocket thread
-    
+
     if shares > 0 then # buy action
       if @stock_position < 0
         if @stock_position + shares == 0
@@ -81,7 +81,7 @@ class StockPosition
         end
       else
         @price_metric = ((@price_metric * @stock_position) + (shares * price)) /
-                        (@stock_position + shares)
+            (@stock_position + shares)
       end
 
       @stock_purchased += shares
@@ -125,33 +125,33 @@ class StockPosition
   def unresolved_orders
     # Returns any orders which are logged as open, but not yet closed
     # Needed as orders can close via websockets faster than they open via API
-    
+
     @open_orders - @closed_orders
   end
 
   def close_order(order_id)
     # Add the order number to the closed orders array
-    
+
     @closed_orders.push(order_id)
   end
-  
+
   def record_action(order_id, ts, qty, price)
     # Record that this transaction has occured for this order
-    
+
     @order_log[order_id] = {ts => {qty: qty, price: price}}
   end
-  
+
   def order_log(order_id)
     # Return any processed transactions for this order
     @order_log.has_key?(order_id) ? @order_log[order_id] : {}
   end
-  
+
   def action_processed?(order_id, ts)
     # Determine if this transaction has already been processed
-    
+
     if @order_log[order_id].nil? || !(@order_log[order_id].has_key?(ts))
       false
-    else 
+    else
       true
     end
   end
@@ -195,26 +195,26 @@ class MarketAnalysis
   def last_quote
     @last_quote
   end
-  
+
   def highest_last
     @highest_last
   end
-  
+
   def lowest_last
     @lowest_last
   end
-  
+
   def last_order
     @last_order
   end
-  
+
   def new_quote(inbound_quote)
     # Update analysis based on incoming quote
-    
+
     @last_quote = inbound_quote.clone
     @last_bid = inbound_quote.has_key?('bid') ? inbound_quote['bid'] : @last_bid
     @last_ask = inbound_quote.has_key?('ask') ? inbound_quote['ask'] : @last_ask
-    
+
     if inbound_quote.has_key?('last')
       @highest_last = (@highest_last == 0 ? inbound_quote['last'] : @highest_last)
       @lowest_last = (@lowest_last == 0 ? inbound_quote['last'] : @lowest_last)
@@ -237,13 +237,13 @@ class MarketAnalysis
 
   def bid_volatility
     # Returns the percentage difference between the first and last saved bids
-    
+
     @latest_bids[0].nil? ? 0 : (@latest_bids[-1] * 100 / @latest_bids[0]) - 100
   end
 
   def ask_volatility
     # Returns the percentage difference between the first and last saved asks
-    
+
     @latest_asks[0].nil? ? 0 : (@latest_asks[-1] * 100 / @latest_asks[0]) - 100
   end
 end
@@ -268,65 +268,55 @@ execution_websocket = Stockfighter::Websockets.new(gm.config)
 execution_websocket.add_execution_callback { |execution|
   # Ensure you don't have long running operations (eg calling api.*) as part of this
   # callback method as the event processing for all websockets is performed on 1 thread.
-  
+
   # Process each fill item as it is received - verify execution is valid first
 
   if execution['order']['account'] == gm.config[:account] &&
       execution['order']['symbol'] == gm.config[:symbol] &&
       execution['order']['venue'] == gm.config[:venue]
 
-=begin
     order_log = $my_pos.order_log(execution['order']['id'])
     execution['order']['fills'].each do |fill_item|
       if execution['order']['direction'] == 'sell'
-        fill_item['qty'] = fill_item['qty'] * -1
+        fill_item['qty'] = (fill_item['qty']).abs * -1
       end
 
       item_found = false
       order_log.each do |key, log_item|
-        if log_item['qty'] == fill_item['qty'] && 
+        if log_item['qty'] == fill_item['qty'] &&
             log_item['price'] == fill_item['price']
           order_log.delete(key)
           item_found = true
         end
       end
-      
+
       # If this fill was not found in recorded transactions, process it
       if !(item_found)
-        $my_pos.trade(fill_item["qty"], fill_item["price"])
-        $my_pos.record_action(execution['order']['id'], fill_item['ts'], 
-          fill_item['qty'], fill_item['price'])
-      end
-        
-
-      # Only process transactions that haven't been recorded as processed
-      if !( $my_pos.action_processed?(execution['order']['id'], fill_item['ts']) )
-        $my_pos.trade(fill_item["qty"], fill_item["price"])
-        $my_pos.record_action(execution['order']['id'], fill_item['ts'], 
-          fill_item['qty'], fill_item['price'])
-      end
-    end
-=end
-
-    # Resolve the trade if it is no longer open
-
-    if !(execution['order']['open'])
-      execution['order']['fills'].each do |fill_item|
-        if execution['order']['direction'] == 'sell'
-          fill_item['qty'] = fill_item['qty'] * -1
-        end
-
         $my_pos.trade(fill_item["qty"], fill_item["price"])
         $my_pos.record_action(execution['order']['id'], fill_item['ts'],
                               fill_item['qty'], fill_item['price'])
       end
 
+=begin
+      # Only process transactions that haven't been recorded as processed
+      if !( $my_pos.action_processed?(execution['order']['id'], fill_item['ts']) )
+        $my_pos.trade(fill_item["qty"], fill_item["price"])
+        $my_pos.record_action(execution['order']['id'], fill_item['ts'],
+          fill_item['qty'], fill_item['price'])
+      end
+=end
+    end
+
+
+    # Resolve the trade if it is no longer open
+
+    if !(execution['order']['open'])
       p 'Order: ' + (execution['order']['id']).to_s + ' is closed.'
       $my_pos.close_order(execution['order']['id'])
     end
 
   end
-  
+
 }
 
 # Isolate the websockets to their own individual threads - mixing with trades causes missed transactions
@@ -376,25 +366,26 @@ while true do
       order_status = api.order_status(order_id)
       order_status['open'] ? true : $my_pos.close_order(order_id)
     end
-    
+
   elsif $my_pos.current_position == 0 # no stock position - buy some stock
     if $my_analysis.last_ask > 0
       $my_pos.execute_trade(500, ($my_analysis.last_ask + $price_buffer), api)
       p 'Buying 500@' + ($my_analysis.last_ask + $price_buffer).to_s
     end
-    
-  elsif $my_pos.profit > 10000000 # Sufficient profit - try blowing up the market
-    $my_pos.execute_trade(-2000, 100, api, 'limit')
-    p 'Selling 2000@100'
-    sleep(5)
-    $my_pos.execute_trade(2000, 200000, api, 'limit')
-    p 'Buying 2000@200000'
 
-    
+  elsif $my_pos.profit > 10000000 # Sufficient profit - try blowing up the market
+    if $my_pos.current_position > 0
+      $my_pos.execute_trade(-2000, 100, api, 'limit')
+      p 'Selling 2000@100'
+    else
+      $my_pos.execute_trade(2000, 20000, api, 'limit')
+      p 'Buying 2000@20000'
+    end
+
   else # Exploit any open (*STUPID*) market orders
-    $my_pos.execute_trade(-1, 10000000000, api, 'limit')
-      p 'Selling 1@10000000000'
-      
+    $my_pos.execute_trade(-10, 100000000, api, 'limit')
+    p 'Selling 5@100000000'
+
   end
 
   # Execute any action assigned in this loop, otherwise skip this turn
@@ -402,18 +393,18 @@ while true do
     when 'buy'
       $my_pos.current_position > 0 ? true :
           $my_pos.execute_trade(take_action[:amount], take_action[:price], api)
-          p 'Buying ' + take_action[:amount].to_s + '@' + take_action[:price].to_s
+      p 'Buying ' + take_action[:amount].to_s + '@' + take_action[:price].to_s
     when 'sell'
       $my_pos.current_position < 0 ? true :
           $my_pos.execute_trade((take_action[:amount]) * -1, take_action[:price], api)
-          p 'Selling ' + take_action[:amount].to_s + '@' + take_action[:price].to_s
+      p 'Selling ' + take_action[:amount].to_s + '@' + take_action[:price].to_s
   end
 
   tick_output = 'NAV: $' +
-    (($my_pos.profit + (last_quote.has_key?('last') ? last_quote['last'] : 0) * $my_pos.current_position)/100).to_s.currency_format +
-        ', Pos: ' + $my_pos.current_position.to_s + ', Avg buy: ' + $my_pos.avg_purchase.to_s +
-        ', Avg sell: ' + $my_pos.avg_sell.to_s +
-        ', Price metric: ' + $my_pos.current_price_metric.to_s
+      (($my_pos.profit + (last_quote.has_key?('last') ? last_quote['last'] : 0) * $my_pos.current_position)/100).to_s.currency_format +
+      ', Pos: ' + $my_pos.current_position.to_s + ', Avg buy: ' + $my_pos.avg_purchase.to_s +
+      ', Avg sell: ' + $my_pos.avg_sell.to_s +
+      ', Price metric: ' + $my_pos.current_price_metric.to_s
 
   $last_output == tick_output ? true : (p tick_output ; $last_output = tick_output)
 
