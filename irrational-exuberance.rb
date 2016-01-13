@@ -374,13 +374,11 @@ while true do
     end
 
   elsif $my_pos.profit > 10000000 # Sufficient profit - try blowing up the market
-    if $my_pos.current_position > 0
-      $my_pos.execute_trade(-2000, 100, api, 'limit')
-      p 'Selling 2000@100'
-    else
-      $my_pos.execute_trade(2000, 20000, api, 'limit')
-      p 'Buying 2000@20000'
-    end
+    $my_pos.execute_trade(-2000, 100, api, 'limit')
+    p 'Selling 2000@100'
+    sleep(5)
+    $my_pos.execute_trade(2000, 20000, api, 'limit')
+    p 'Buying 2000@20000'
 
   else # Exploit any open (*STUPID*) market orders
     $my_pos.execute_trade(-10, 100000000, api, 'limit')
