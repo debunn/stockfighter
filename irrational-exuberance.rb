@@ -4,6 +4,8 @@ load 'apikey.rb'
 # Initiate this level
 gm = Stockfighter::GM.new(key: $apikey, level: "irrational_exuberance", polling: true)
 
+#gm.restart
+
 ansi_code = Hash.new
 ansi_code['success'] = "\e[#32m"
 ansi_code['info']    = "\e[#34m"
@@ -133,10 +135,15 @@ class StockPosition
     @closed_orders.push(order_id)
   end
   
-  def record_action(order_id, ts)
+  def record_action(order_id, ts, qty, price)
     # Record that this transaction has occured for this order
     
-    @order_log[order_id] = {ts => true}
+    @order_log[order_id] = {ts => {qty: qty, price: price}}
+  end
+  
+  def order_log(order_id)
+    # Return any processed transactions for this order
+    @order_log.has_key?(order_id) ? @order_log[order_id] : {}
   end
   
   def action_processed?(order_id, ts)
@@ -268,17 +275,38 @@ execution_websocket.add_execution_callback { |execution|
       execution['order']['symbol'] == gm.config[:symbol] &&
       execution['order']['venue'] == gm.config[:venue]
 
+    order_log = $my_pos.order_log(execution['order']['id'])
     execution['order']['fills'].each do |fill_item|
       if execution['order']['direction'] == 'sell'
         fill_item['qty'] = fill_item['qty'] * -1
       end
 
+      item_found = false
+      order_log.each do |key, log_item|
+        if log_item['qty'] == fill_item['qty'] && 
+            log_item['price'] == fill_item['price']
+          order_log.delete(key)
+          item_found = true
+        end
+      end
+      
+      # If this fill was not found in recorded transactions, process it
+      if !(item_found)
+        $my_pos.trade(fill_item["qty"], fill_item["price"])
+        $my_pos.record_action(execution['order']['id'], fill_item['ts'], 
+          fill_item['qty'], fill_item['price'])
+      end
+        
+=begin
       # Only process transactions that haven't been recorded as processed
       if !( $my_pos.action_processed?(execution['order']['id'], fill_item['ts']) )
         $my_pos.trade(fill_item["qty"], fill_item["price"])
-        $my_pos.record_action(execution['order']['id'], fill_item['ts'])
+        $my_pos.record_action(execution['order']['id'], fill_item['ts'], 
+          fill_item['qty'], fill_item['price'])
       end
+=end
     end
+    
 
     # Resolve the trade if it is no longer open
 
@@ -305,6 +333,7 @@ while true do
   buy_profit = $my_analysis.last_ask == 0 ? 0 : $my_pos.current_price_metric - $my_analysis.last_ask
   sell_profit = $my_analysis.last_bid == 0 ? 0 : $my_analysis.last_bid - $my_pos.current_price_metric
 
+=begin
   if !($my_pos.unresolved_orders.empty?) # resolve any open orders
     $my_pos.unresolved_orders.each do |order_id|
       order_status = api.order_status(order_id)
@@ -329,6 +358,29 @@ while true do
 
   else # Try a buy based on my last trade, plus a loop based increase
     take_action = {action: 'buy', amount: 50, price: ($my_pos.last_trade + $loop_kicker)}
+  end
+=end
+
+  if !($my_pos.unresolved_orders.empty?) # resolve any open orders
+    $my_pos.unresolved_orders.each do |order_id|
+      order_status = api.order_status(order_id)
+      order_status['open'] ? true : $my_pos.close_order(order_id)
+    end
+    
+  elsif $my_pos.current_position == 0 # no stock position - buy some stock
+    if $my_analysis.last_ask > 0
+      $my_pos.execute_trade(500, ($my_analysis.last_ask + $price_buffer), api)
+      p 'Buying 500@' + ($my_analysis.last_ask + $price_buffer).to_s
+    end
+    
+  elsif $my_pos.profit > 10000000 # Sufficient profit - try blowing up the market
+      $my_pos.execute_trade(-2000, 100, api, 'limit')
+      p 'Selling 2000@100'
+    
+  else # Exploit any open (*STUPID*) market orders
+    $my_pos.execute_trade(-5, 100000000, api, 'limit')
+      p 'Selling 5@100000000'
+      
   end
 
   # Execute any action assigned in this loop, otherwise skip this turn
