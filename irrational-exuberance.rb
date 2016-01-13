@@ -305,24 +305,24 @@ execution_websocket.add_execution_callback { |execution|
         $my_pos.record_action(execution['order']['id'], fill_item['ts'], 
           fill_item['qty'], fill_item['price'])
       end
+    end
 =end
 
-      # Resolve the trade if it is no longer open
+    # Resolve the trade if it is no longer open
 
-      if !(execution['order']['open'])
-        execution['order']['fills'].each do |fill_item|
-          if execution['order']['direction'] == 'sell'
-            fill_item['qty'] = fill_item['qty'] * -1
-          end
-
-          $my_pos.trade(fill_item["qty"], fill_item["price"])
-          $my_pos.record_action(execution['order']['id'], fill_item['ts'],
-                                fill_item['qty'], fill_item['price'])
+    if !(execution['order']['open'])
+      execution['order']['fills'].each do |fill_item|
+        if execution['order']['direction'] == 'sell'
+          fill_item['qty'] = fill_item['qty'] * -1
         end
 
-        p 'Order: ' + (execution['order']['id']).to_s + ' is closed.'
-        $my_pos.close_order(execution['order']['id'])
+        $my_pos.trade(fill_item["qty"], fill_item["price"])
+        $my_pos.record_action(execution['order']['id'], fill_item['ts'],
+                              fill_item['qty'], fill_item['price'])
       end
+
+      p 'Order: ' + (execution['order']['id']).to_s + ' is closed.'
+      $my_pos.close_order(execution['order']['id'])
     end
 
   end
@@ -389,7 +389,7 @@ while true do
     sleep(5)
     $my_pos.execute_trade(2000, 200000, api, 'limit')
     p 'Buying 2000@200000'
-    
+
     
   else # Exploit any open (*STUPID*) market orders
     $my_pos.execute_trade(-1, 10000000000, api, 'limit')
