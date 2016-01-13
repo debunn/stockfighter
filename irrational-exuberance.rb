@@ -136,8 +136,12 @@ class StockPosition
   end
 
   def record_action(order_id, ts, qty, price)
-    # Record that this transaction has occured for this order
-    @order_log[order_id][ts] = {qty: qty, price: price}
+    # Record that this transaction has occurred for this order
+    if @order_log.has_key?(order_id)
+      @order_log[order_id][ts] = {'qty' => qty, 'price' => price}
+    else
+      @order_log[order_id] = {ts => {'qty' => qty, 'price' => price}}
+    end
   end
 
   def order_log(order_id)
@@ -283,7 +287,7 @@ execution_websocket.add_execution_callback { |execution|
       item_found = false
       order_log.each do |key, log_item|
         if log_item['qty'] == fill_item['qty'] &&
-            log_item['price'] == fill_item['price']
+            log_item['price'] == fill_item['price'] && !(item_found)
           order_log.delete(key)
           item_found = true
         end
