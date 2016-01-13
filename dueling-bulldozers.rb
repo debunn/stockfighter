@@ -122,7 +122,7 @@ class StockPosition
   end
   
   def action_processed?(order_id, ts)
-    if @order_log[order_id].nil? || @order_log[order_id][ts].nil?
+    if @order_log[order_id].nil? || !(@order_log[order_id].has_key?(ts))
       false
     else 
       true
