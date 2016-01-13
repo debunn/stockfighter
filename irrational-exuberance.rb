@@ -385,7 +385,7 @@ while true do
 
   else # Exploit any open (*STUPID*) market orders
     $my_pos.execute_trade(-1, 10000000000, api, 'limit')
-    p 'Selling 1@10000000000'
+    p 'Selling 1@100000000'
 
   end
 
