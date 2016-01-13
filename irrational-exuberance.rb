@@ -275,6 +275,7 @@ execution_websocket.add_execution_callback { |execution|
       execution['order']['symbol'] == gm.config[:symbol] &&
       execution['order']['venue'] == gm.config[:venue]
 
+=begin
     order_log = $my_pos.order_log(execution['order']['id'])
     execution['order']['fills'].each do |fill_item|
       if execution['order']['direction'] == 'sell'
@@ -297,7 +298,7 @@ execution_websocket.add_execution_callback { |execution|
           fill_item['qty'], fill_item['price'])
       end
         
-=begin
+
       # Only process transactions that haven't been recorded as processed
       if !( $my_pos.action_processed?(execution['order']['id'], fill_item['ts']) )
         $my_pos.trade(fill_item["qty"], fill_item["price"])
@@ -383,17 +384,16 @@ while true do
     end
     
   elsif $my_pos.profit > 10000000 # Sufficient profit - try blowing up the market
-    if $my_pos.current_position > 0
-      $my_pos.execute_trade(-2000, 100, api, 'limit')
-      p 'Selling 2000@100'
-    else
-      $my_pos.execute_trade(2000, 200000, api, 'limit')
-      p 'Buying 2000@200000'
-    end
+    $my_pos.execute_trade(-2000, 100, api, 'limit')
+    p 'Selling 2000@100'
+    sleep(5)
+    $my_pos.execute_trade(2000, 200000, api, 'limit')
+    p 'Buying 2000@200000'
+    
     
   else # Exploit any open (*STUPID*) market orders
-    $my_pos.execute_trade(-10, 100000000, api, 'limit')
-      p 'Selling 10@100000000'
+    $my_pos.execute_trade(-1, 10000000000, api, 'limit')
+      p 'Selling 1@10000000000'
       
   end
 
