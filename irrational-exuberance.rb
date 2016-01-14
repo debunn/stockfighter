@@ -45,6 +45,27 @@ class StockPosition
     @open_orders = [] # Stores order numbers for all placed orders
     @closed_orders = [] # Stores order numbers where order['open'] = false
     @order_log = {} # Tracks each transaction, prevents duplicate processing
+    @semaphore_lock = 0 # Shows the concurrency lock state for this object
+  end
+
+  def semaphore_lock
+    # Sets the 'locked' flag for semaphore concurrency
+    if @semaphore_lock == 0
+      @semaphore_lock = 1
+      true
+    else
+      false
+    end
+  end
+
+  def semaphore_unlock
+    # Un-sets the 'locked' flag for semaphore concurrency
+    if @semaphore_lock == 1
+      @semaphore_lock = 0
+      true
+    else
+      false
+    end
   end
 
   def current_position
@@ -138,15 +159,15 @@ class StockPosition
   def record_action(order_id, ts, qty, price)
     # Record that this transaction has occurred for this order
     if @order_log.has_key?(order_id)
-      @order_log[order_id][ts] = {'qty' => qty, 'price' => price}
+      @order_log[order_id][ts.to_s] = {'qty' => qty, 'price' => price}
     else
-      @order_log[order_id] = {ts => {'qty' => qty, 'price' => price}}
+      @order_log[order_id] = {ts.to_s => {'qty' => qty, 'price' => price}}
     end
   end
 
   def order_log(order_id)
     # Return any processed transactions for this order
-    @order_log.has_key?(order_id) ? @order_log[order_id] : {}
+    @order_log.has_key?(order_id) ? @order_log[order_id].clone : {}
   end
 
   def action_processed?(order_id, ts)
@@ -278,6 +299,14 @@ execution_websocket.add_execution_callback { |execution|
       execution['order']['symbol'] == gm.config[:symbol] &&
       execution['order']['venue'] == gm.config[:venue]
 
+    # Attempt to lock the $my_pos object for updating
+    semaphore = $my_pos.semaphore_lock
+
+    while !(semaphore) do
+      # keep looping until it's available
+      semaphore = $my_pos.semaphore_lock
+    end
+
     order_log = $my_pos.order_log(execution['order']['id'])
     execution['order']['fills'].each do |fill_item|
       if execution['order']['direction'] == 'sell'
@@ -317,6 +346,9 @@ execution_websocket.add_execution_callback { |execution|
       p 'Order: ' + (execution['order']['id']).to_s + ' is closed.'
       $my_pos.close_order(execution['order']['id'])
     end
+
+    # Unlock the $my_pos object for updating
+    semaphore = $my_pos.semaphore_unlock
 
   end
 
@@ -376,16 +408,21 @@ while true do
       p 'Buying 500@' + ($my_analysis.last_ask + $price_buffer).to_s
     end
 
-  elsif $my_pos.profit > 10000000 # Sufficient profit - try blowing up the market
-    $my_pos.execute_trade(-2000, 100, api, 'limit')
+  elsif $my_pos.profit > 20000000 # Sufficient profit - try blowing up the market
+    $my_pos.execute_trade(-200, 100000, api, 'limit')
+    $my_pos.execute_trade(500, 80000, api, 'limit')
+    sleep(1)
+    p 'Selling 200@100000'
+    p 'Buying 5@80000'
+    sleep(30)
+    $my_pos.execute_trade(-3000, 100, api, 'limit')
     p 'Selling 2000@100'
-    sleep(5)
-    $my_pos.execute_trade(200, 20000, api, 'limit')
-    p 'Buying 200@20000'
+    p 'Buying 1000@200'
+
 
   else # Exploit any open (*STUPID*) market orders
-    $my_pos.execute_trade(-1, 100000000, api, 'limit')
-    p 'Selling 1@100000000'
+    $my_pos.execute_trade(-1, 2000000000, api, 'limit')
+    p 'Selling 1@200000000'
 
   end
 
