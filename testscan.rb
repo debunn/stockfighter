@@ -43,9 +43,10 @@ end
 
 account_list = {}
 order_num = 0
-while order_num < 400 do
+while order_num < 1000 do
   order_num += 1
   cancel_it(order_num, api, account_list)
+  order_num % 100 == 0 ? (p account_list.length.to_s + '@' + order_num.to_s) : true
 end
 p account_list
 p account_list.length.to_s
@@ -113,6 +114,6 @@ execution_websocket.add_execution_callback { |execution|
 
 # Isolate the websockets to their own individual threads - mixing with trades causes missed transactions
 #ticker_thr = Thread.new { ticker_websocket.start(tickertape_enabled:true, executions_enabled:false) }
-execution_thr = Thread.new { execution_websocket.start(tickertape_enabled:false, executions_enabled:true) }
+#execution_thr = Thread.new { execution_websocket.start(tickertape_enabled:false, executions_enabled:true) }
 
-sleep(10)
+#sleep(10)
