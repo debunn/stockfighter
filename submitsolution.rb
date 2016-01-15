@@ -16,8 +16,9 @@ exec_summary = 'The accused account was discovered by monitoring all accounts ' 
     'This assumes that the accused account was using a strategy to maximize profits per ' +
     'transaction (which is the usual red flag for insider trading.) ' +
     'A link to a more detailed report is attached via the explanation_link URL.'
-report_url = 'https://bitbucket.org/debunn/stockfighter/src/' +
-    '225db8a0dec013d5ea731d9d72b2ab2cdc1802be/making-amends-report.txt?at=master'
+report_url = 'https://bitbucket.org/debunn/stockfighter/downloads/making-amends-report.txt'
+#######################################
+# DON'T FORGET TO UPLOAD THE REPORT TO BITBUCKET'S DOWNLOADS
 #######################################
 
 def perform_request(action, url, body)
