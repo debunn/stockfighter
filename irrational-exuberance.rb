@@ -253,7 +253,7 @@ class MarketAnalysis
     end
 
     # Add this last ask value to the history of asks, if it isn't the same value
-    if @last_ask != @latest_asks[-1] && last_ask > 0
+    if @last_ask != @latest_asks[-1] && @last_ask > 0
       @latest_asks.push(@last_ask)
       @latest_asks.length < @history_size ? true : @latest_asks.shift
     end
@@ -329,14 +329,6 @@ execution_websocket.add_execution_callback { |execution|
                               fill_item['qty'], fill_item['price'])
       end
 
-=begin
-      # Only process transactions that haven't been recorded as processed
-      if !( $my_pos.action_processed?(execution['order']['id'], fill_item['ts']) )
-        $my_pos.trade(fill_item["qty"], fill_item["price"])
-        $my_pos.record_action(execution['order']['id'], fill_item['ts'],
-          fill_item['qty'], fill_item['price'])
-      end
-=end
     end
 
 
