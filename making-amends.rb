@@ -29,7 +29,7 @@ def cancel_it(order_num, api)
     api.cancel_order(order_num)
   rescue => error
     if !(error.message.index('You have to own account').nil?)
-      account_num = error.message.split(' ')[-1].chop
+      account_num = error.message.split(' ')[-1].tr('\"', '').chop
       $account_list[account_num] = true
     else
       p error.message
@@ -155,8 +155,8 @@ class StockPosition
 
   def record_action(order_id, ts, qty, price)
     # Record that this transaction has occurred for this order
-    @trade_history << Time.now.strftime($time_format) + ' - ' +
-        (qty > 0 ? 'buy ' : 'sell ') + qty.abs.to_s + '@' + price.to_s
+    @trade_history = @trade_history + Time.now.strftime($time_format) + ' - ' +
+        (qty > 0 ? 'buy ' : 'sell ') + qty.abs.to_s + '@' + price.to_s + "\n"
     if @order_log.has_key?(order_id)
       @order_log[order_id][ts.to_s] = {'qty' => qty, 'price' => price}
     else
@@ -193,7 +193,11 @@ class StockPosition
 
   def profit_metric
     # Calculate the avg amount of profit per share bought / sold overall
-    (@sold_total - @purchased_total) / (@stock_purchased + @stock_sold)
+    if @stock_purchased == 0 && @stock_sold == 0
+      0
+    else
+      (@sold_total - @purchased_total) / (@stock_purchased + @stock_sold)
+    end
   end
 
 end
@@ -284,11 +288,6 @@ ticker_websocket.add_quote_callback { |quote|
 
 }
 
-# Isolate the ticker to its own individual thread
-ticker_thr = Thread.new {
-  ticker_websocket.start(tickertape_enabled:true, executions_enabled:false)
-}
-
 
 # Scan through the first 600 orders to determine a list of all account numbers
 order_num = 0
@@ -302,8 +301,14 @@ p $account_list.length.to_s + ' total accounts found.'
 # thread and position object for each
 $execution_websockets = {}
 $account_positions = {}
+$execution_threads = {}
 
-$account_list.each do |account_key|
+# Isolate the ticker to its own individual thread
+ticker_thr = Thread.new {
+  ticker_websocket.start(tickertape_enabled:true, executions_enabled:false)
+}
+
+$account_list.each do |account_key, account_bool|
   # Set functionality for when each execution websocket receives trade information
   temp_config = {key: $apikey, account: account_key,
                  symbol: gm.config[:symbol], venue: gm.config[:venue]}
@@ -353,27 +358,26 @@ $account_list.each do |account_key|
 
   }
 
-  execution_thr = Thread.new {
+  $execution_threads[account_key] = Thread.new {
     $execution_websockets[account_key].start(tickertape_enabled:false, executions_enabled:true)
   }
+
 end
 
-# Main analysis loop
-while true do
-  p 'Sleeping for 5 minutes to allow for trade data collection'
-  sleep(5 * 60)
+# Main analysis
+p 'Sleeping for 10 minutes to allow for trade data collection'
+sleep(10 * 60)
 
-  metrics_hash = {}
-  largest_metric = 0
-  $account_list.each do |account_key|
-    this_metric = $account_positions[account_key].profit_metric
-    p 'Account: ' + account_key.to_s + ', profit metric: ' + this_metric.to_s
-    metrics_hash[this_metric] = account_key
-    largest_metric = this_metric > largest_metric ? this_metric : largest_metric
-  end
-
-  p '-----------------------------------------------------------------------------'
-  p 'Dumping trades for account: ' + metrics_hash[largest_metric]
-  p $account_positions[metrics_hash[largest_metric]].trade_history
-  p '-----------------------------------------------------------------------------'
+metrics_hash = {}
+largest_metric = 0
+$account_list.each do |account_key, account_bool|
+  this_metric = $account_positions[account_key].profit_metric
+  p 'Account: ' + account_key.to_s + ', profit metric: ' + this_metric.to_s
+  metrics_hash[this_metric] = account_key
+  largest_metric = this_metric > largest_metric ? this_metric : largest_metric
 end
+
+p '-----------------------------------------------------------------------------'
+puts 'Dumping trades for account: ' + metrics_hash[largest_metric].to_s
+puts $account_positions[metrics_hash[largest_metric]].trade_history
+p '-----------------------------------------------------------------------------'
