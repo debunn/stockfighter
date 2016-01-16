@@ -7,12 +7,12 @@ post_url = "https://www.stockfighter.io/gm/instances/#{gm.instance_id}/judge"
 #######################################
 # UPDATE THIS SECTION BEFORE SENDING!
 #######################################
-accuse_account = ''
+accuse_account = 'FLP56310848'
 exec_summary = 'The accused account was discovered by monitoring all accounts ' +
     '(determined by running order close commands on the first 600 orders) ' +
     'trading on this exchange, and then performing trading analysis on their executions. ' +
     'Determining the account involved was done by calculating the average profit made ' +
-    'per share traded, and then comparing all accounts to see which one(s) stood out. ' +
+    'per order, and then comparing all accounts to see which one(s) stood out. ' +
     'This assumes that the accused account was using a strategy to maximize profits per ' +
     'transaction (which is the usual red flag for insider trading.) ' +
     'A link to a more detailed report is attached via the explanation_link URL.'

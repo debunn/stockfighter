@@ -50,6 +50,7 @@ end
 class StockPosition
 
   attr_reader :trade_history
+  attr_reader :trade_total
 
   def initialize()
     @stock_position = 0 # The number of shares currently held
@@ -64,6 +65,7 @@ class StockPosition
     @order_log = {} # Tracks each transaction, prevents duplicate processing
     @semaphore_lock = 0 # Shows the concurrency lock state for this object
     @trade_history = '' # A text record of trading, for audit purposes
+    @trade_total = 0
   end
 
   def current_position
@@ -122,6 +124,7 @@ class StockPosition
     end
     @last_trade = price
     @stock_position += shares
+    @trade_total += 1
   end
 
   def current_price_metric
@@ -192,11 +195,11 @@ class StockPosition
   end
 
   def profit_metric
-    # Calculate the avg amount of profit per share bought / sold overall
-    if @stock_purchased == 0 && @stock_sold == 0
+    # Calculate the avg amount of profit per order overall
+    if @order_log.length == 0
       0
     else
-      (@sold_total - @purchased_total) / (@stock_purchased + @stock_sold)
+      (@sold_total - @purchased_total) / @order_log.length
     end
   end
 
@@ -288,12 +291,17 @@ ticker_websocket.add_quote_callback { |quote|
 
 }
 
+# Isolate the ticker to its own individual thread
+ticker_thr = Thread.new {
+  ticker_websocket.start(tickertape_enabled:true, executions_enabled:false)
+}
 
-# Scan through the first 600 orders to determine a list of all account numbers
+# Scan through the first 700 orders to determine a list of all account numbers
 order_num = 0
+sleep(60)
 while order_num < 600 do
   order_num += 1
-  cancel_it(order_num, api)
+  cancel_it((order_num + 1000), api)
 end
 p $account_list.length.to_s + ' total accounts found.'
 
@@ -302,11 +310,6 @@ p $account_list.length.to_s + ' total accounts found.'
 $execution_websockets = {}
 $account_positions = {}
 $execution_threads = {}
-
-# Isolate the ticker to its own individual thread
-ticker_thr = Thread.new {
-  ticker_websocket.start(tickertape_enabled:true, executions_enabled:false)
-}
 
 $account_list.each do |account_key, account_bool|
   # Set functionality for when each execution websocket receives trade information
@@ -366,18 +369,39 @@ end
 
 # Main analysis
 p 'Sleeping for 10 minutes to allow for trade data collection'
-sleep(10 * 60)
+sleep(5 * 60)
 
-metrics_hash = {}
-largest_metric = 0
-$account_list.each do |account_key, account_bool|
-  this_metric = $account_positions[account_key].profit_metric
-  p 'Account: ' + account_key.to_s + ', profit metric: ' + this_metric.to_s
-  metrics_hash[this_metric] = account_key
-  largest_metric = this_metric > largest_metric ? this_metric : largest_metric
+# Kill the quote thread and re-connect - it seems to time out
+Thread.kill(ticker_thr)
+ticker_thr = Thread.new {
+  ticker_websocket.start(tickertape_enabled:true, executions_enabled:false)
+}
+
+# Kill all websockets and re-connect - they seem to time out
+$execution_threads.each do |key, thread|
+  Thread.kill(thread)
+
+  $execution_threads[key] = Thread.new {
+    $execution_websockets[key].start(tickertape_enabled:false, executions_enabled:true)
+  }
 end
 
-p '-----------------------------------------------------------------------------'
-puts 'Dumping trades for account: ' + metrics_hash[largest_metric].to_s
-puts $account_positions[metrics_hash[largest_metric]].trade_history
-p '-----------------------------------------------------------------------------'
+sleep(5 * 60)
+
+metrics_hash = {}
+
+$account_list.each do |account_key, account_bool|
+  this_metric = $account_positions[account_key].profit_metric
+  puts 'Account: ' + account_key.to_s + ', profit metric: ' + this_metric.to_s + "\n"
+end
+
+$account_list.each do |account_key, account_bool|
+  this_metric = $account_positions[account_key].profit_metric
+  metrics_hash[this_metric] = account_key
+  if this_metric > 100000
+    p '-----------------------------------------------------------------------------'
+    puts 'Dumping trades for account: ' + account_key.to_s
+    puts $account_positions[account_key].trade_history
+    p '-----------------------------------------------------------------------------'
+  end
+end
